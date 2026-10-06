@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard — Indicadores Econômicos (Dados Abertos BCB)</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>📈 Indicadores Econômicos do Brasil</h1>
+    <p class="subtitle">
+      Dados abertos do Banco Central (SGS) · cache renovado a cada {{ data.cache_hours }}h ·
+      persistidos em PostgreSQL gerenciado pela Aiven.io
+    </p>
+  </header>
+
+  <section class="cards">
+    {% for ind in data.indicators %}
+    <div class="card">
+      <span class="label">{{ ind.name }}</span>
+      <span class="value">
+        {{ ind.latest_value if ind.latest_value is not none else "—" }}
+        <span class="unit">{{ ind.unit }}</span>
+      </span>
+      <span class="meta">
+        {% if ind.latest_date %}ref. {{ ind.latest_date }}{% else %}sem dados ainda{% endif %}
+        {% if ind.delta is not none %}
+          · <span class="{{ 'up' if ind.delta > 0 else ('down' if ind.delta < 0 else '') }}">
+            {{ "%+.2f"|format(ind.delta) }}
+          </span>
+        {% endif %}
+      </span>
+    </div>
+    {% endfor %}
+    <div class="card muted">
+      <span class="label">Acessos ao dashboard</span>
+      <span class="value">{{ data.total_visits }}</span>
+      <span class="meta">uptime: {{ data.uptime_seconds }}s</span>
+    </div>
+  </section>
+
+  <section class="chart-container">
+    <h2>Séries históricas (últimos {{ data.indicators[0].labels|length }} pontos)</h2>
+    <canvas id="indicatorsChart" height="90"></canvas>
+  </section>
+
+  <footer>
+    <small>
+      Atualiza automaticamente a cada 60s · Fonte:
+      <a href="https://dadosabertos.bcb.gov.br/" target="_blank" rel="noopener">dadosabertos.bcb.gov.br</a>
+      · <a href="/api/indicators">/api/indicators</a> · <a href="/healthz">/healthz</a>
+    </small>
+  </footer>
+
+  <script>
+    const indicators = {{ data.indicators | tojson }};
+    const colors = ["#4f46e5", "#16a34a", "#dc2626"];
+
+    const datasets = indicators.map((ind, i) => ({
+      label: ind.name + " (" + ind.unit + ")",
+      data: ind.values,
+      borderColor: colors[i % colors.length],
+      backgroundColor: colors[i % colors.length] + "26",
+      tension: 0.3,
+      yAxisID: i === 0 ? "y" : "y" + i,
+      fill: false
+    }));
+
+    const ctx = document.getElementById('indicatorsChart');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: indicators[0] ? indicators[0].labels : [],
+        datasets: datasets
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: true, position: 'bottom' } },
+        scales: { y: { beginAtZero: false } }
+      }
+    });
+
+    setTimeout(() => location.reload(), 60000);
+  </script>
+</body>
+</html>
